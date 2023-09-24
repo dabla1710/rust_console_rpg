@@ -1,10 +1,9 @@
 use clearscreen;
-use std::{fs, io, num::ParseIntError};
+use std::{time::Duration, fs, io::{self, ErrorKind}, num::ParseIntError, error::Error, mem::Discriminant};
 use text_colorizer::*;
 
 pub fn start_game() {
     startup_messages();
-    
 }
 
 fn startup_messages() {
@@ -18,27 +17,33 @@ fn startup_messages() {
     // get user choice
     let mut valid_selection = false;
 
-    while valid_selection != true {
+    while &mut valid_selection != &true {
         // read input
         let mut choice = String::new();
 
         io::stdin()
-        .read_line(&mut choice)
-        .expect("Failed to read line");
-    
+            .read_line(&mut choice)
+            .expect("Failed to read line");
+
         // parse choice to number
-        match choice
-            .trim()
-            .parse::<u64>() 
-            {
-                Ok(n) => match n {
-                    1 => {create_new_game(); valid_selection = true},
-                    2 => {load_game(); valid_selection = true},
-                    3 => {exit_game(); valid_selection = true},
-                    _ => println!("No valid selection. Please try again."),
+        match choice.trim().parse::<u64>() {
+            Ok(n) => match n {
+                1 => {
+                    create_new_game();
+                    valid_selection = true
                 }
-                Err(e) => eprintln!("Please Input a Number"),
-            };
+                2 => {
+                    load_game();
+                    valid_selection = true
+                }
+                3 => {
+                    exit_game();
+                    valid_selection = true
+                }
+                _ => println!("No valid selection. Please try again."),
+            },
+            Err(e) => eprintln!("{} - Please Input a Number", e),
+        };
     }
 }
 
@@ -54,16 +59,16 @@ fn create_new_game() {
     while decision != true {
         // read in player name
         io::stdin()
-        .read_line(&mut player_name)
-        .expect("Should have been valid input");
+            .read_line(&mut player_name)
+            .expect("Should have been valid input");
 
         // Ask for confirmation
-        println!("Does the name {} make you happy ? y/n", player_name.green());
+        println!("Does the name {} make you happy ? y/n", player_name.trim_end().green());
         let mut confirmation = String::new();
 
         io::stdin()
-        .read_line(&mut confirmation)
-        .expect("Should have been valid input");
+            .read_line(&mut confirmation)
+            .expect("Should have been valid input");
 
         match confirmation.trim() {
             "y" => decision = true,
@@ -73,39 +78,59 @@ fn create_new_game() {
             }
         }
     }
-    // generate the savegame for thes name
+    // generate the savegame for given name
     let mut path_to_savegame = String::from("./savegames/");
-    path_to_savegame.push_str(&player_name);
+    path_to_savegame.push_str(&player_name.trim_end());
 
     // create folder if it does not already exist
-    let folder = fs::create_dir_all(path_to_savegame).expect("New Save could not be created");
+    let folder = fs::create_dir_all(path_to_savegame).expect("Failed to create savegame!");
 }
 
-fn load_game() -> std::io::Result<()> {
-    // check if savegame folder exists
+fn load_game() {
+    // check if savegame folder exists and print loadable saves
+    clearscreen::clear().expect("Failed to clear screen");
+    println!("{}", "Which savegame would you like to be loaded ?".blue());
     let path_to_savegames = "./savegames";
 
-    // Use read_dir to open the folder and iterate over its contents
-    let entries = fs::read_dir(path_to_savegames)?;
+    if let Ok(folders) = fs::read_dir(path_to_savegames) {
+        for savegame in folders {
+            let savegame = savegame.unwrap().file_name();
+            println!("{:?}", savegame);
+        }
+    } else {
+        // if there are no previous savegames -> go back to the main menu
+        startup_messages();
+    };
 
-    for entry in entries {
-        // Unwrap the entry to get the DirEntry
-        let entry = entry?;
+    // Let user decide which savegame to load
+    let mut save_game_selection = String::new();
 
-        // Get the file or directory name as a String
-        let file_name = entry.file_name();
+    io::stdin()
+    .read_line(&mut save_game_selection)
+    .expect("No valid input !");
 
-        // Print the name of each file or directory in the folder
-        println!("{}", file_name.to_string_lossy());
-    }
-
-    Ok(())
+    if let Ok(folders) = fs::read_dir(path_to_savegames) {
+        'compare_savegames: for savegame in folders {
+            let savegame = savegame.unwrap().file_name();
+            // check if safegame is the same as user input
+            if save_game_selection.trim_end() == savegame {
+                // TODO:  Load data in player struct
+                println!("Savegame: {} is being loaded !", save_game_selection.trim_end().green());
+                break 'compare_savegames;
+            }
+        }
+    } else {
+        println!("No matching savegame found - Returning to main menu");
+        std::thread::sleep(Duration::from_secs(3));
+        // if there are no previous savegames -> go back to the main menu
+        startup_messages();
+    };
 }
 
 fn exit_game() {
-    clearscreen::clear()
-    .expect("Failed to clear screen");
+    clearscreen::clear().expect("Failed to clear screen");
 
     println!("Exiting the game");
     std::process::exit(1);
 }
+
